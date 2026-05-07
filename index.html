@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sphinx Game Helper</title>
+<meta name="description" content="Binary-search helper for the TalesRunner Sphinx number-guessing event (1-9999, 14 guesses).">
+<meta name="theme-color" content="#0f1115">
+<meta property="og:title" content="Sphinx Game Helper">
+<meta property="og:description" content="Binary-search helper for the TalesRunner Sphinx number-guessing event.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔢</text></svg>">
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #181b22;
+    --fg: #e9edf2;
+    --muted: #7d8694;
+    --accent: #4ea1ff;
+    --warn: #ff5d5d;
+    --win: #5dffa5;
+    --btn-lo: #2a3a5a;
+    --btn-hi: #5a3a2a;
+    --btn-ok: #2a5a3a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; min-height: 100%;
+    background: var(--bg); color: var(--fg);
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  }
+  body { display: flex; align-items: center; justify-content: center; padding: 1.5rem; }
+  .panel {
+    position: relative;
+    width: 100%; max-width: 520px;
+    background: var(--panel); border-radius: 14px;
+    padding: 1.75rem 1.75rem 1.5rem;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+  }
+  .gh-link {
+    position: absolute; top: 1rem; right: 1rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 6px;
+    color: var(--muted); transition: color .15s, background .15s;
+  }
+  .gh-link:hover { color: var(--fg); background: rgba(255,255,255,.05); }
+  .gh-link svg { width: 20px; height: 20px; fill: currentColor; }
+  h1 {
+    font-size: 0.9rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 1.25rem;
+  }
+  .counter {
+    text-align: center; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: .5rem;
+  }
+  .counter.warn { color: var(--warn); font-weight: 600; }
+
+  .guess-wrap { position: relative; margin: .5rem 0 .25rem; }
+  input.guess {
+    display: block; width: 100%;
+    background: transparent; border: 0; outline: 0;
+    text-align: center;
+    font-size: 7rem; font-weight: 700;
+    line-height: 1; letter-spacing: -.04em;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+    padding: 0; margin: 0;
+    appearance: textfield; -moz-appearance: textfield;
+  }
+  input.guess::-webkit-outer-spin-button,
+  input.guess::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input.guess.invalid { color: var(--warn); }
+  input.guess:focus { outline: 2px solid #2a3a5a; outline-offset: 6px; border-radius: 6px; }
+
+  .guess-static { text-align: center; font-size: 5rem; font-weight: 700; color: var(--win); }
+  .guess-static.over { color: var(--warn); font-size: 3rem; }
+
+  .suggested {
+    text-align: center; font-size: .8rem; color: var(--muted);
+    margin: 0 0 .75rem; min-height: 1.2em;
+  }
+  .suggested .pill {
+    background: #232733; padding: .15rem .55rem;
+    border-radius: 999px; cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    color: var(--accent);
+  }
+  .suggested .pill:hover { filter: brightness(1.2); }
+
+  .range {
+    text-align: center; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 1.25rem;
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .6rem; margin-bottom: 1rem; }
+  button {
+    appearance: none; border: 0; cursor: pointer;
+    color: var(--fg); font: inherit; font-weight: 600;
+    padding: 1rem .5rem; border-radius: 10px;
+    transition: transform .05s, filter .15s;
+  }
+  button:hover { filter: brightness(1.15); }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .35; cursor: not-allowed; }
+  .btn-lo { background: var(--btn-lo); }
+  .btn-ok { background: var(--btn-ok); }
+  .btn-hi { background: var(--btn-hi); }
+  .btn-reset {
+    background: transparent; color: var(--muted);
+    border: 1px solid #2a2f3a; width: 100%; padding: .55rem;
+    font-size: .85rem;
+  }
+  .key { opacity: .6; font-size: .75rem; margin-left: .35rem; }
+
+  .history, .wins {
+    margin-top: 1rem;
+    font-size: .85rem; color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .history h2, .wins h2 {
+    font-size: .7rem; font-weight: 600;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 .4rem;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .history ol, .wins ol { margin: 0; padding-left: 1.5rem; max-height: 180px; overflow-y: auto; }
+  .history li, .wins li { margin: .15rem 0; }
+  .history .r-lower  { color: #8aa9d8; }
+  .history .r-higher { color: #d8a98a; }
+  .history .r-won    { color: var(--win); font-weight: 600; }
+  .wins .meta { color: #5e6675; font-size: .78rem; margin-left: .4rem; }
+  .wins .answer { color: var(--win); font-weight: 600; }
+
+  .h2-actions button {
+    background: transparent; color: var(--muted);
+    border: 1px solid #2a2f3a; padding: .15rem .55rem;
+    border-radius: 6px; font-size: .7rem; font-weight: 500;
+    margin-left: .3rem; cursor: pointer;
+  }
+  .h2-actions button:hover { color: var(--fg); }
+
+  .banner {
+    text-align: center; padding: .6rem; border-radius: 8px;
+    margin-bottom: 1rem; font-weight: 600;
+  }
+  .banner.win   { background: rgba(93,255,165,.12); color: var(--win); }
+  .banner.warn  { background: rgba(255,93,93,.12);  color: var(--warn); }
+  .hint {
+    text-align: center; color: var(--muted);
+    font-size: .75rem; margin-top: .75rem;
+  }
+</style>
+</head>
+<body>
+  <div class="panel">
+    <a class="gh-link" href="https://github.com/KengAcethylene/sphinx-game-helper" target="_blank" rel="noopener" aria-label="View source on GitHub" title="View source on GitHub">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+    <h1>Sphinx Game Helper</h1>
+    <div id="banner"></div>
+    <div id="counter" class="counter">Guess 1 / 14</div>
+
+    <div class="guess-wrap" id="guessWrap">
+      <input class="guess" id="guessInput" type="number" inputmode="numeric" min="1" max="9999" value="5000">
+    </div>
+    <div class="suggested" id="suggested"></div>
+
+    <div class="range" id="range">Range: 1 — 9999</div>
+
+    <div class="row">
+      <button class="btn-lo" id="btnLower">Lower<span class="key">J / ←</span></button>
+      <button class="btn-ok" id="btnCorrect">Correct<span class="key">K / Enter</span></button>
+      <button class="btn-hi" id="btnHigher">Higher<span class="key">L / →</span></button>
+    </div>
+    <button class="btn-reset" id="btnReset">Reset<span class="key">R</span></button>
+
+    <div class="history" id="history"></div>
+    <div class="wins" id="wins"></div>
+
+    <div class="hint">Tip: edit the number to override the binary-search suggestion. J/K/L work when the number isn't focused.</div>
+  </div>
+
+<script>
+  const MAX = 14, LO0 = 1, HI0 = 9999;
+  const STORAGE_KEY = 'guess-helper-wins-v1';
+  let lo, hi, guesses, history, locked, winAt;
+
+  const $ = (id) => document.getElementById(id);
+  const midpoint = () => Math.floor((lo + hi) / 2);
+
+  function loadWins() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function saveWins(arr) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+  }
+  function recordWin(answer, guessCount) {
+    const wins = loadWins();
+    wins.unshift({ ts: Date.now(), answer, guesses: guessCount });
+    saveWins(wins);
+    renderWins();
+  }
+  function clearWins() {
+    if (!confirm('Clear all saved answer history?')) return;
+    localStorage.removeItem(STORAGE_KEY);
+    renderWins();
+  }
+  function exportWins() {
+    const wins = loadWins();
+    if (wins.length === 0) { alert('No history to export.'); return; }
+    const rows = [['timestamp_iso', 'answer', 'guesses']]
+      .concat(wins.map(w => [new Date(w.ts).toISOString(), w.answer, w.guesses]));
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guess-history-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function reset() {
+    lo = LO0; hi = HI0; guesses = 0; history = [];
+    locked = false; winAt = null;
+    render();
+  }
+
+  function getInputValue() {
+    const v = $('guessInput').value.trim();
+    if (v === '') return null;
+    const n = Number(v);
+    if (!Number.isInteger(n)) return null;
+    return n;
+  }
+
+  function isValidGuess(n) {
+    return n !== null && n >= lo && n <= hi;
+  }
+
+  function applyResponse(direction) {
+    if (locked) return;
+    const g = getInputValue();
+    if (!isValidGuess(g)) { flashInvalid(); return; }
+    history.push({ n: g, r: direction });
+    guesses++;
+    if (direction === 'lower')  hi = g - 1;
+    if (direction === 'higher') lo = g + 1;
+    if (lo > hi) { locked = true; banner('Contradiction — please Reset.', 'warn'); }
+    else if (guesses >= MAX) { locked = true; banner('Out of guesses.', 'warn'); }
+    render();
+  }
+
+  function correct() {
+    if (locked) return;
+    const g = getInputValue();
+    if (!isValidGuess(g)) { flashInvalid(); return; }
+    history.push({ n: g, r: 'won' });
+    guesses++;
+    locked = true;
+    winAt = guesses;
+    recordWin(g, guesses);
+    banner(`Won in ${guesses} guess${guesses === 1 ? '' : 'es'}! Auto-reset in 2s…`, 'win');
+    render();
+    setTimeout(reset, 2000);
+  }
+
+  function flashInvalid() {
+    const el = $('guessInput');
+    el.classList.add('invalid');
+    setTimeout(() => el.classList.remove('invalid'), 400);
+  }
+
+  function banner(msg, cls) {
+    const b = $('banner');
+    b.textContent = msg;
+    b.className = 'banner ' + cls;
+  }
+  function clearBanner() { $('banner').textContent = ''; $('banner').className = ''; }
+
+  function render() {
+    if (!winAt && !locked) clearBanner();
+
+    const counter = $('counter');
+    if (winAt) {
+      counter.textContent = `Won at guess ${winAt} / ${MAX}`;
+      counter.className = 'counter';
+    } else {
+      const shown = Math.min(guesses + 1, MAX);
+      counter.textContent = `Guess ${shown} / ${MAX}`;
+      counter.className = 'counter' + (shown >= 12 ? ' warn' : '');
+    }
+
+    const wrap = $('guessWrap');
+    if (winAt) {
+      wrap.innerHTML = `<div class="guess-static">🎉</div>`;
+    } else if (locked) {
+      wrap.innerHTML = `<div class="guess-static over">—</div>`;
+    } else {
+      // preserve focus + caret if input already exists
+      let input = $('guessInput');
+      if (!input) {
+        wrap.innerHTML = `<input class="guess" id="guessInput" type="number" inputmode="numeric" min="${lo}" max="${hi}">`;
+        input = $('guessInput');
+        attachInputHandlers(input);
+      }
+      input.min = String(lo);
+      input.max = String(hi);
+      // only overwrite value if not focused (don't stomp on user typing)
+      if (document.activeElement !== input) {
+        input.value = String(midpoint());
+        input.classList.remove('invalid');
+      }
+    }
+
+    const sug = $('suggested');
+    if (locked || winAt) {
+      sug.innerHTML = '';
+    } else {
+      const m = midpoint();
+      sug.innerHTML = `Binary-search suggestion: <span class="pill" id="useSuggestion">${m}</span>`;
+      $('useSuggestion').addEventListener('click', () => {
+        const input = $('guessInput');
+        input.value = String(m);
+        input.classList.remove('invalid');
+      });
+    }
+
+    $('range').textContent = locked && !winAt
+      ? `Range: ${lo} — ${hi} (invalid)`
+      : `Range: ${lo} — ${hi}`;
+
+    const hEl = $('history');
+    if (history.length === 0) { hEl.innerHTML = ''; }
+    else {
+      const items = history.map((h) =>
+        `<li>${h.n} <span class="r-${h.r}">→ ${h.r}</span></li>`
+      ).join('');
+      hEl.innerHTML = `<h2>This Round</h2><ol>${items}</ol>`;
+    }
+
+    renderWins();
+  }
+
+  function renderWins() {
+    const wins = loadWins();
+    const wEl = $('wins');
+    if (wins.length === 0) {
+      wEl.innerHTML = `<h2>Past Wins (0)<span class="h2-actions"></span></h2>`;
+      return;
+    }
+    const items = wins.slice(0, 30).map(w => {
+      const d = new Date(w.ts);
+      const date = d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      return `<li><span class="answer">${w.answer}</span> <span class="meta">in ${w.guesses} · ${date}</span></li>`;
+    }).join('');
+    const more = wins.length > 30 ? `<li class="meta">…and ${wins.length - 30} older</li>` : '';
+    wEl.innerHTML = `
+      <h2>
+        Past Wins (${wins.length})
+        <span class="h2-actions">
+          <button id="exportWins">Export CSV</button>
+          <button id="clearWins">Clear</button>
+        </span>
+      </h2>
+      <ol>${items}${more}</ol>`;
+    $('exportWins').addEventListener('click', exportWins);
+    $('clearWins').addEventListener('click', clearWins);
+  }
+
+  function attachInputHandlers(input) {
+    input.addEventListener('focus', () => input.select());
+    input.addEventListener('input', () => {
+      const g = getInputValue();
+      input.classList.toggle('invalid', !isValidGuess(g));
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); input.blur(); correct(); }
+      else if (e.key === 'Escape') { input.blur(); }
+    });
+  }
+
+  $('btnLower').addEventListener('click', () => applyResponse('lower'));
+  $('btnHigher').addEventListener('click', () => applyResponse('higher'));
+  $('btnCorrect').addEventListener('click', correct);
+  $('btnReset').addEventListener('click', reset);
+  attachInputHandlers($('guessInput'));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.repeat) return;
+    const inputFocused = document.activeElement === $('guessInput');
+    if (inputFocused) return;
+    const k = e.key.toLowerCase();
+    if (k === 'j' || e.key === 'ArrowLeft')       { e.preventDefault(); applyResponse('lower'); }
+    else if (k === 'l' || e.key === 'ArrowRight') { e.preventDefault(); applyResponse('higher'); }
+    else if (k === 'k' || e.key === 'Enter')      { e.preventDefault(); correct(); }
+    else if (k === 'r')                            { e.preventDefault(); reset(); }
+  });
+
+  reset();
+</script>
+</body>
+</html>

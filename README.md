@@ -1,14 +1,14 @@
-# misc
+# sphinx-game-helper
 
-## Contents
+Binary-search assistant for the TalesRunner Sphinx number-guessing event (range 1–9999, max 14 guesses per round).
 
-### `guess-helper.html` — Sphinx Game Helper
+**Live**: <https://kengacethylene.github.io/sphinx-game-helper/>
 
-Binary-search assistant for the Sphinx number-guessing event (range 1–9999, max 14 guesses per round).
+## Open it
 
-**Open it**: double-click the file, or host it on GitHub Pages and open from your phone/desktop.
+Visit the live URL above, or double-click `index.html` locally.
 
-**How to use**
+## How to use
 
 1. The big number is the next guess (binary-search optimal). Type it into the game.
 2. Tap a button based on the game's response:
@@ -17,11 +17,13 @@ Binary-search assistant for the Sphinx number-guessing event (range 1–9999, ma
    - **Higher** — answer is above your guess
 3. The next guess updates automatically.
 
-**Manual override**
+## Manual override
 
 Click the big number to edit it. Useful for trying lucky numbers (e.g. 1004, 7777) on the first guess. Click the pill below to snap back to the binary-search suggestion.
 
-**Keyboard shortcuts** (when the number isn't focused)
+## Keyboard shortcuts
+
+(when the number isn't focused)
 
 | Key | Action |
 |---|---|
@@ -32,11 +34,11 @@ Click the big number to edit it. Useful for trying lucky numbers (e.g. 1004, 777
 | `Enter` (in input) | Submit as Correct |
 | `Esc` (in input) | Blur input |
 
-**Answer history**
+## Answer history
 
 Every win is saved to `localStorage` with timestamp, answer, and guess count. View it under "Past Wins" at the bottom of the page. **Export CSV** downloads the full log for analysis (e.g., to check whether the answer distribution is actually uniform).
 
-**Strategy notes**
+## Strategy notes
 
 - Worst case: 14 guesses (information-theoretic minimum for 9999 numbers).
 - Average with binary search: ~12.3 guesses against a uniform random target.

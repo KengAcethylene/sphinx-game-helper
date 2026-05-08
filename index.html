@@ -287,8 +287,9 @@
     winAt = guesses;
     saveRound();
     recordWin(g, guesses);
-    banner(`Won in ${guesses} guess${guesses === 1 ? '' : 'es'}! Press R to start a new round.`, 'win');
+    banner(`Won in ${guesses} guess${guesses === 1 ? '' : 'es'}! Auto-reset in 3s…`, 'win');
     render();
+    setTimeout(reset, 3000);
   }
 
   function flashInvalid() {
@@ -427,7 +428,10 @@
   if (saved) {
     ({ lo, hi, guesses, history, locked, winAt } = saved);
     render();
-    if (winAt) banner(`Won in ${winAt} guess${winAt === 1 ? '' : 'es'}! Press R to start a new round.`, 'win');
+    if (winAt) {
+      banner(`Won in ${winAt} guess${winAt === 1 ? '' : 'es'}! Auto-reset in 3s…`, 'win');
+      setTimeout(reset, 3000);
+    }
     else if (locked) banner(lo > hi ? 'Contradiction — please Reset.' : 'Out of guesses.', 'warn');
   } else {
     reset();

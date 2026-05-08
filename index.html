@@ -223,7 +223,7 @@
       <label class="toggle">
         <input type="checkbox" id="jitterToggle">
         <span>Jitter mode</span>
-        <span class="info" tabindex="0" data-tip="Adds a random ±20 offset to the suggested number for the first 5 guesses, so different rounds traverse different paths instead of always 5000 → 2500/7500 → … Slightly increases the chance of running out of guesses.">?</span>
+        <span class="info" tabindex="0" data-tip="Adds a random ±3% offset (of the current range) to the suggested number for the first 5 guesses, so different rounds traverse different paths instead of always 5000 → 2500/7500 → … Slightly increases the chance of running out of guesses.">?</span>
       </label>
     </div>
 
@@ -235,7 +235,7 @@
   const STORAGE_KEY = 'guess-helper-wins-v1';
   const ROUND_KEY = 'guess-helper-round-v1';
   const JITTER_KEY = 'guess-helper-jitter-v1';
-  const NOISE = 20, NOISE_GUESSES = 5;
+  const NOISE_FRAC = 0.03, NOISE_GUESSES = 5;
   let lo, hi, guesses, history, locked, winAt, suggestion;
   let jitterOn = localStorage.getItem(JITTER_KEY) === '1';
 
@@ -244,7 +244,9 @@
   function computeSuggestion() {
     const m = midpoint();
     if (!jitterOn || guesses >= NOISE_GUESSES || locked) return m;
-    const delta = Math.floor(Math.random() * (2 * NOISE + 1)) - NOISE;
+    const noise = Math.floor((hi - lo + 1) * NOISE_FRAC);
+    if (noise === 0) return m;
+    const delta = Math.floor(Math.random() * (2 * noise + 1)) - noise;
     return Math.max(lo, Math.min(hi, m + delta));
   }
 

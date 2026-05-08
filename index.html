@@ -151,6 +151,46 @@
     text-align: center; color: var(--muted);
     font-size: .75rem; margin-top: .75rem;
   }
+  .settings {
+    margin-top: 1rem; padding-top: .9rem;
+    border-top: 1px solid #232733;
+  }
+  .toggle {
+    display: flex; align-items: center; gap: .5rem;
+    cursor: pointer; font-size: .85rem; color: var(--fg);
+    user-select: none;
+  }
+  .toggle input { cursor: pointer; accent-color: var(--accent); }
+  .info {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #2a2f3a; color: var(--muted);
+    font-size: .65rem; font-weight: 700;
+    cursor: help; position: relative;
+  }
+  .info:hover { color: var(--fg); background: #353b48; }
+  .info::after {
+    content: attr(data-tip);
+    position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%);
+    width: max-content; max-width: 260px;
+    background: #1f2330; color: var(--fg);
+    border: 1px solid #2a2f3a; border-radius: 6px;
+    padding: .5rem .65rem; font-size: .72rem; font-weight: 400;
+    line-height: 1.45; text-align: left;
+    opacity: 0; pointer-events: none; transition: opacity .15s;
+    z-index: 10;
+    box-shadow: 0 4px 12px rgba(0,0,0,.4);
+  }
+  .info::before {
+    content: ''; position: absolute; bottom: calc(100% + 2px); left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent; border-top-color: #2a2f3a;
+    opacity: 0; pointer-events: none; transition: opacity .15s;
+    z-index: 10;
+  }
+  .info:hover::after, .info:focus::after,
+  .info:hover::before, .info:focus::before { opacity: 1; }
 </style>
 </head>
 <body>
@@ -179,17 +219,34 @@
     <div class="history" id="history"></div>
     <div class="wins" id="wins"></div>
 
-    <div class="hint">Tip: edit the number to override the binary-search suggestion. J/K/L work when the number isn't focused.</div>
+    <div class="settings">
+      <label class="toggle">
+        <input type="checkbox" id="jitterToggle">
+        <span>Jitter mode</span>
+        <span class="info" tabindex="0" data-tip="Adds a random ±20 offset to the suggested number for the first 5 guesses, so different rounds traverse different paths instead of always 5000 → 2500/7500 → … Slightly increases the chance of running out of guesses.">?</span>
+      </label>
+    </div>
+
+    <div class="hint">Tip: edit the number to override the suggestion. J/K/L work when the number isn't focused.</div>
   </div>
 
 <script>
   const MAX = 14, LO0 = 1, HI0 = 9999;
   const STORAGE_KEY = 'guess-helper-wins-v1';
   const ROUND_KEY = 'guess-helper-round-v1';
-  let lo, hi, guesses, history, locked, winAt;
+  const JITTER_KEY = 'guess-helper-jitter-v1';
+  const NOISE = 20, NOISE_GUESSES = 5;
+  let lo, hi, guesses, history, locked, winAt, suggestion;
+  let jitterOn = localStorage.getItem(JITTER_KEY) === '1';
 
   const $ = (id) => document.getElementById(id);
   const midpoint = () => Math.floor((lo + hi) / 2);
+  function computeSuggestion() {
+    const m = midpoint();
+    if (!jitterOn || guesses >= NOISE_GUESSES || locked) return m;
+    const delta = Math.floor(Math.random() * (2 * NOISE + 1)) - NOISE;
+    return Math.max(lo, Math.min(hi, m + delta));
+  }
 
   function loadWins() {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); }
@@ -200,7 +257,7 @@
   }
 
   function saveRound() {
-    localStorage.setItem(ROUND_KEY, JSON.stringify({ lo, hi, guesses, history, locked, winAt }));
+    localStorage.setItem(ROUND_KEY, JSON.stringify({ lo, hi, guesses, history, locked, winAt, suggestion }));
   }
   function loadRound() {
     let s;
@@ -216,6 +273,7 @@
       if (!h || !Number.isInteger(h.n)) return null;
       if (h.r !== 'lower' && h.r !== 'higher' && h.r !== 'won') return null;
     }
+    if (s.suggestion !== undefined && s.suggestion !== null && !Number.isInteger(s.suggestion)) return null;
     return s;
   }
   function recordWin(answer, guessCount) {
@@ -247,6 +305,7 @@
   function reset() {
     lo = LO0; hi = HI0; guesses = 0; history = [];
     locked = false; winAt = null;
+    suggestion = computeSuggestion();
     saveRound();
     render();
   }
@@ -273,6 +332,7 @@
     if (direction === 'higher') lo = g + 1;
     if (lo > hi) { locked = true; banner('Contradiction — please Reset.', 'warn'); }
     else if (guesses >= MAX) { locked = true; banner('Out of guesses.', 'warn'); }
+    suggestion = computeSuggestion();
     saveRound();
     render();
   }
@@ -335,7 +395,7 @@
       input.max = String(hi);
       // only overwrite value if not focused (don't stomp on user typing)
       if (document.activeElement !== input) {
-        input.value = String(midpoint());
+        input.value = String(suggestion);
         input.classList.remove('invalid');
       }
     }
@@ -344,11 +404,12 @@
     if (locked || winAt) {
       sug.innerHTML = '';
     } else {
-      const m = midpoint();
-      sug.innerHTML = `Binary-search suggestion: <span class="pill" id="useSuggestion">${m}</span>`;
+      const s = suggestion;
+      const label = (jitterOn && guesses < NOISE_GUESSES) ? 'Suggested (jittered)' : 'Binary-search suggestion';
+      sug.innerHTML = `${label}: <span class="pill" id="useSuggestion">${s}</span>`;
       $('useSuggestion').addEventListener('click', () => {
         const input = $('guessInput');
-        input.value = String(m);
+        input.value = String(s);
         input.classList.remove('invalid');
       });
     }
@@ -411,6 +472,16 @@
   $('btnHigher').addEventListener('click', () => applyResponse('higher'));
   $('btnCorrect').addEventListener('click', correct);
   $('btnReset').addEventListener('click', reset);
+  $('jitterToggle').checked = jitterOn;
+  $('jitterToggle').addEventListener('change', (e) => {
+    jitterOn = e.target.checked;
+    localStorage.setItem(JITTER_KEY, jitterOn ? '1' : '0');
+    if (!locked) {
+      suggestion = computeSuggestion();
+      saveRound();
+      render();
+    }
+  });
   attachInputHandlers($('guessInput'));
 
   document.addEventListener('keydown', (e) => {
@@ -427,6 +498,7 @@
   const saved = loadRound();
   if (saved) {
     ({ lo, hi, guesses, history, locked, winAt } = saved);
+    suggestion = Number.isInteger(saved.suggestion) ? saved.suggestion : computeSuggestion();
     render();
     if (winAt) {
       banner(`Won in ${winAt} guess${winAt === 1 ? '' : 'es'}! Auto-reset in 3s…`, 'win');

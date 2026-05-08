@@ -42,8 +42,20 @@ Every win is saved to `localStorage` with timestamp, answer, and guess count. Vi
 
 - Worst case: 14 guesses (information-theoretic minimum for 9999 numbers).
 - Average with binary search: ~12.3 guesses against a uniform random target.
-- You cannot beat this average if the target is truly uniform random — the strategy is to maximize **rounds per hour** and treat low-guess rounds as a lottery.
-- P(finish ≤ k) = (2ᵏ − 1) / 9999. So a ≤7-guess round happens ~1.3% of the time (~1 in 79 rounds).
+- You cannot beat this average if the target is truly uniform random — the only strategy is volume, and low-guess rounds are a lottery.
+- Per round: P(finish ≤ k) = (2ᵏ − 1) / 9999. A ≤7-guess round happens ~1.3% of the time.
+
+### Daily budget
+
+Each daily quest grants 50 keys → **50 rounds/day** is the hard ceiling. Across those 50 rounds:
+
+| At least one round in ≤ k guesses | Probability per day |
+|---|---|
+| ≤ 4 (jackpot tier) | ~7% (≈ 1 every 2 weeks) |
+| ≤ 7 (top tier) | ~47% (about every other day) |
+| ≤ 10 | ~99.5% (nearly every day) |
+
+Formula: `P = 1 − (1 − (2ᵏ−1)/9999)⁵⁰`. Run all 50 keys daily; the variance does the work.
 
 ## License
 

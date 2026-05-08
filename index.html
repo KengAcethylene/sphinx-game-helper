@@ -185,6 +185,7 @@
 <script>
   const MAX = 14, LO0 = 1, HI0 = 9999;
   const STORAGE_KEY = 'guess-helper-wins-v1';
+  const ROUND_KEY = 'guess-helper-round-v1';
   let lo, hi, guesses, history, locked, winAt;
 
   const $ = (id) => document.getElementById(id);
@@ -196,6 +197,26 @@
   }
   function saveWins(arr) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+  }
+
+  function saveRound() {
+    localStorage.setItem(ROUND_KEY, JSON.stringify({ lo, hi, guesses, history, locked, winAt }));
+  }
+  function loadRound() {
+    let s;
+    try { s = JSON.parse(localStorage.getItem(ROUND_KEY) || 'null'); }
+    catch { return null; }
+    if (!s || typeof s !== 'object') return null;
+    if (!Number.isInteger(s.lo) || !Number.isInteger(s.hi)) return null;
+    if (!Number.isInteger(s.guesses) || s.guesses < 0) return null;
+    if (typeof s.locked !== 'boolean') return null;
+    if (s.winAt !== null && !Number.isInteger(s.winAt)) return null;
+    if (!Array.isArray(s.history)) return null;
+    for (const h of s.history) {
+      if (!h || !Number.isInteger(h.n)) return null;
+      if (h.r !== 'lower' && h.r !== 'higher' && h.r !== 'won') return null;
+    }
+    return s;
   }
   function recordWin(answer, guessCount) {
     const wins = loadWins();
@@ -226,6 +247,7 @@
   function reset() {
     lo = LO0; hi = HI0; guesses = 0; history = [];
     locked = false; winAt = null;
+    saveRound();
     render();
   }
 
@@ -251,6 +273,7 @@
     if (direction === 'higher') lo = g + 1;
     if (lo > hi) { locked = true; banner('Contradiction — please Reset.', 'warn'); }
     else if (guesses >= MAX) { locked = true; banner('Out of guesses.', 'warn'); }
+    saveRound();
     render();
   }
 
@@ -262,10 +285,10 @@
     guesses++;
     locked = true;
     winAt = guesses;
+    saveRound();
     recordWin(g, guesses);
-    banner(`Won in ${guesses} guess${guesses === 1 ? '' : 'es'}! Auto-reset in 2s…`, 'win');
+    banner(`Won in ${guesses} guess${guesses === 1 ? '' : 'es'}! Press R to start a new round.`, 'win');
     render();
-    setTimeout(reset, 2000);
   }
 
   function flashInvalid() {
@@ -400,7 +423,15 @@
     else if (k === 'r')                            { e.preventDefault(); reset(); }
   });
 
-  reset();
+  const saved = loadRound();
+  if (saved) {
+    ({ lo, hi, guesses, history, locked, winAt } = saved);
+    render();
+    if (winAt) banner(`Won in ${winAt} guess${winAt === 1 ? '' : 'es'}! Press R to start a new round.`, 'win');
+    else if (locked) banner(lo > hi ? 'Contradiction — please Reset.' : 'Out of guesses.', 'warn');
+  } else {
+    reset();
+  }
 </script>
 </body>
 </html>

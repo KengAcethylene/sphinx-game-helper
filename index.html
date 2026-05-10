@@ -240,6 +240,17 @@
   const ROUND_KEY = 'guess-helper-round-v1';
   const JITTER_KEY = 'guess-helper-jitter-v1';
   const NOISE_FRAC = 0.03, NOISE_GUESSES = 5;
+  const ROUND_VERSION = 2;
+
+  // Migrations bring an older round state up to the next version.
+  // Each entry migrates from version N to N+1.
+  const roundMigrations = {
+    1: (s) => {
+      if (!Array.isArray(s.undoStack)) s.undoStack = [];
+      s.v = 2;
+      return s;
+    },
+  };
   let lo, hi, guesses, history, locked, winAt, suggestion;
   let undoStack = [];
   let autoResetTimer = null;
@@ -278,13 +289,27 @@
   }
 
   function saveRound() {
-    localStorage.setItem(ROUND_KEY, JSON.stringify({ lo, hi, guesses, history, locked, winAt, suggestion, undoStack }));
+    localStorage.setItem(ROUND_KEY, JSON.stringify({ v: ROUND_VERSION, lo, hi, guesses, history, locked, winAt, suggestion, undoStack }));
+  }
+  function migrateRound(s) {
+    let v = Number.isInteger(s.v) ? s.v : 1;
+    while (v < ROUND_VERSION) {
+      const fn = roundMigrations[v];
+      if (!fn) return null;
+      s = fn(s);
+      const next = Number.isInteger(s.v) ? s.v : v + 1;
+      if (next <= v) return null;
+      v = next;
+    }
+    return s;
   }
   function loadRound() {
     let s;
     try { s = JSON.parse(localStorage.getItem(ROUND_KEY) || 'null'); }
     catch { return null; }
     if (!s || typeof s !== 'object') return null;
+    s = migrateRound(s);
+    if (!s) return null;
     if (!Number.isInteger(s.lo) || !Number.isInteger(s.hi)) return null;
     if (!Number.isInteger(s.guesses) || s.guesses < 0) return null;
     if (typeof s.locked !== 'boolean') return null;
@@ -295,7 +320,7 @@
       if (h.r !== 'lower' && h.r !== 'higher' && h.r !== 'won') return null;
     }
     if (s.suggestion !== undefined && s.suggestion !== null && !Number.isInteger(s.suggestion)) return null;
-    if (s.undoStack !== undefined && s.undoStack !== null && !Array.isArray(s.undoStack)) return null;
+    if (!Array.isArray(s.undoStack)) return null;
     return s;
   }
   function recordWin(answer, guessCount) {

@@ -95,6 +95,7 @@
     margin-bottom: 1.25rem;
   }
   .row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: .6rem; margin-bottom: 1rem; }
+  .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
   button {
     appearance: none; border: 0; cursor: pointer;
     color: var(--fg); font: inherit; font-weight: 600;
@@ -214,7 +215,10 @@
       <button class="btn-ok" id="btnCorrect">Correct<span class="key">K / Enter</span></button>
       <button class="btn-hi" id="btnHigher">Higher<span class="key">L / →</span></button>
     </div>
-    <button class="btn-reset" id="btnReset">Reset<span class="key">R</span></button>
+    <div class="row-2">
+      <button class="btn-reset" id="btnUndo">Undo<span class="key">U</span></button>
+      <button class="btn-reset" id="btnReset">Reset<span class="key">R</span></button>
+    </div>
 
     <div class="history" id="history"></div>
     <div class="wins" id="wins"></div>
@@ -237,7 +241,22 @@
   const JITTER_KEY = 'guess-helper-jitter-v1';
   const NOISE_FRAC = 0.03, NOISE_GUESSES = 5;
   let lo, hi, guesses, history, locked, winAt, suggestion;
+  let undoStack = [];
+  let autoResetTimer = null;
   let jitterOn = localStorage.getItem(JITTER_KEY) === '1';
+
+  function snapshot() {
+    return {
+      lo, hi, guesses,
+      history: history.map(h => ({ n: h.n, r: h.r })),
+      locked, winAt, suggestion,
+      winRecorded: false,
+    };
+  }
+  function pushUndo(snap) {
+    undoStack.push(snap);
+    if (undoStack.length > 50) undoStack.shift();
+  }
 
   const $ = (id) => document.getElementById(id);
   const midpoint = () => Math.floor((lo + hi) / 2);
@@ -259,7 +278,7 @@
   }
 
   function saveRound() {
-    localStorage.setItem(ROUND_KEY, JSON.stringify({ lo, hi, guesses, history, locked, winAt, suggestion }));
+    localStorage.setItem(ROUND_KEY, JSON.stringify({ lo, hi, guesses, history, locked, winAt, suggestion, undoStack }));
   }
   function loadRound() {
     let s;
@@ -276,6 +295,7 @@
       if (h.r !== 'lower' && h.r !== 'higher' && h.r !== 'won') return null;
     }
     if (s.suggestion !== undefined && s.suggestion !== null && !Number.isInteger(s.suggestion)) return null;
+    if (s.undoStack !== undefined && s.undoStack !== null && !Array.isArray(s.undoStack)) return null;
     return s;
   }
   function recordWin(answer, guessCount) {
@@ -305,10 +325,30 @@
   }
 
   function reset() {
+    if (autoResetTimer) { clearTimeout(autoResetTimer); autoResetTimer = null; }
     lo = LO0; hi = HI0; guesses = 0; history = [];
     locked = false; winAt = null;
+    undoStack = [];
     suggestion = computeSuggestion();
     saveRound();
+    render();
+  }
+
+  function undo() {
+    if (undoStack.length === 0) return;
+    if (autoResetTimer) { clearTimeout(autoResetTimer); autoResetTimer = null; }
+    const snap = undoStack.pop();
+    if (snap.winRecorded) {
+      const wins = loadWins();
+      wins.shift();
+      saveWins(wins);
+    }
+    lo = snap.lo; hi = snap.hi; guesses = snap.guesses;
+    history = snap.history.map(h => ({ n: h.n, r: h.r }));
+    locked = snap.locked; winAt = snap.winAt;
+    suggestion = Number.isInteger(snap.suggestion) ? snap.suggestion : computeSuggestion();
+    saveRound();
+    clearBanner();
     render();
   }
 
@@ -328,6 +368,7 @@
     if (locked) return;
     const g = getInputValue();
     if (!isValidGuess(g)) { flashInvalid(); return; }
+    pushUndo(snapshot());
     history.push({ n: g, r: direction });
     guesses++;
     if (direction === 'lower')  hi = g - 1;
@@ -343,6 +384,9 @@
     if (locked) return;
     const g = getInputValue();
     if (!isValidGuess(g)) { flashInvalid(); return; }
+    const snap = snapshot();
+    snap.winRecorded = true;
+    pushUndo(snap);
     history.push({ n: g, r: 'won' });
     guesses++;
     locked = true;
@@ -351,7 +395,7 @@
     recordWin(g, guesses);
     banner(`Won in ${guesses} guess${guesses === 1 ? '' : 'es'}! Auto-reset in 3s…`, 'win');
     render();
-    setTimeout(reset, 3000);
+    autoResetTimer = setTimeout(() => { autoResetTimer = null; reset(); }, 3000);
   }
 
   function flashInvalid() {
@@ -420,6 +464,8 @@
       ? `Range: ${lo} — ${hi} (invalid)`
       : `Range: ${lo} — ${hi}`;
 
+    $('btnUndo').disabled = undoStack.length === 0;
+
     const hEl = $('history');
     if (history.length === 0) { hEl.innerHTML = ''; }
     else {
@@ -474,6 +520,7 @@
   $('btnHigher').addEventListener('click', () => applyResponse('higher'));
   $('btnCorrect').addEventListener('click', correct);
   $('btnReset').addEventListener('click', reset);
+  $('btnUndo').addEventListener('click', undo);
   $('jitterToggle').checked = jitterOn;
   $('jitterToggle').addEventListener('change', (e) => {
     jitterOn = e.target.checked;
@@ -495,16 +542,18 @@
     else if (k === 'l' || e.key === 'ArrowRight') { e.preventDefault(); applyResponse('higher'); }
     else if (k === 'k' || e.key === 'Enter')      { e.preventDefault(); correct(); }
     else if (k === 'r')                            { e.preventDefault(); reset(); }
+    else if (k === 'u')                            { e.preventDefault(); undo(); }
   });
 
   const saved = loadRound();
   if (saved) {
     ({ lo, hi, guesses, history, locked, winAt } = saved);
     suggestion = Number.isInteger(saved.suggestion) ? saved.suggestion : computeSuggestion();
+    undoStack = Array.isArray(saved.undoStack) ? saved.undoStack : [];
     render();
     if (winAt) {
       banner(`Won in ${winAt} guess${winAt === 1 ? '' : 'es'}! Auto-reset in 3s…`, 'win');
-      setTimeout(reset, 3000);
+      autoResetTimer = setTimeout(() => { autoResetTimer = null; reset(); }, 3000);
     }
     else if (locked) banner(lo > hi ? 'Contradiction — please Reset.' : 'Out of guesses.', 'warn');
   } else {

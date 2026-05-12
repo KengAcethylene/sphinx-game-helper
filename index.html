@@ -60,19 +60,35 @@
   .guess-wrap { position: relative; margin: .5rem 0 .25rem; }
   input.guess {
     display: block; width: 100%;
-    background: transparent; border: 0; outline: 0;
+    background: transparent; outline: 0;
     text-align: center;
     font-size: 7rem; font-weight: 700;
     line-height: 1; letter-spacing: -.04em;
     font-variant-numeric: tabular-nums;
     color: var(--accent);
-    padding: 0; margin: 0;
+    margin: 0;
+    border: 0;
+    border-bottom: 3px dotted rgba(78, 161, 255, 0.35);
+    padding: 0 0 .4rem;
+    cursor: text;
+    transition: border-color .15s;
     appearance: textfield; -moz-appearance: textfield;
   }
   input.guess::-webkit-outer-spin-button,
   input.guess::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  input.guess.invalid { color: var(--warn); }
-  input.guess:focus { outline: 2px solid #2a3a5a; outline-offset: 6px; border-radius: 6px; }
+  input.guess:hover { border-bottom-color: rgba(78, 161, 255, 0.7); }
+  input.guess.invalid { color: var(--warn); border-bottom-color: rgba(255, 93, 93, 0.6); }
+  input.guess:focus {
+    outline: 2px solid #2a3a5a; outline-offset: 6px; border-radius: 6px;
+    border-bottom-color: var(--accent);
+  }
+  .edit-hint {
+    text-align: center; color: var(--muted);
+    font-size: .72rem; letter-spacing: .04em;
+    margin: .5rem 0 .15rem;
+    transition: opacity .15s;
+  }
+  .guess-wrap:has(input:focus) + .edit-hint { opacity: 0; }
 
   .guess-static { text-align: center; font-size: 5rem; font-weight: 700; color: var(--win); }
   .guess-static.over { color: var(--warn); font-size: 3rem; }
@@ -206,6 +222,7 @@
     <div class="guess-wrap" id="guessWrap">
       <input class="guess" id="guessInput" type="number" inputmode="numeric" min="1" max="9999" value="5000">
     </div>
+    <div class="edit-hint" id="editHint">Tap to enter your own number</div>
     <div class="suggested" id="suggested"></div>
 
     <div class="range" id="range">Range: 1 — 9999</div>
@@ -231,7 +248,7 @@
       </label>
     </div>
 
-    <div class="hint">Tip: edit the number to override the suggestion. J/K/L work when the number isn't focused.</div>
+    <div class="hint">Keyboard: J / K / L = lower · correct · higher · R = reset · U = undo (when the number isn't focused).</div>
   </div>
 
 <script>
@@ -470,6 +487,8 @@
         input.classList.remove('invalid');
       }
     }
+
+    $('editHint').style.display = (locked || winAt) ? 'none' : '';
 
     const sug = $('suggested');
     if (locked || winAt) {

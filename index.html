@@ -241,11 +241,20 @@
     <div class="wins" id="wins"></div>
 
     <div class="settings">
-      <label class="toggle">
-        <input type="checkbox" id="jitterToggle">
-        <span>Jitter mode</span>
-        <span class="info" tabindex="0" data-tip="Adds a random ±3% offset (of the current range) to the suggested number for the first 5 guesses, so different rounds traverse different paths instead of always 5000 → 2500/7500 → … Slightly increases the chance of running out of guesses.">?</span>
-      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem;align-items:center">
+        <label class="toggle">
+          <input type="checkbox" id="jitterToggle">
+          <span>Jitter mode</span>
+          <span class="info" tabindex="0" data-tip="Adds a random ±3% offset (of the current range) to the suggested number for the first 5 guesses, so different rounds traverse different paths instead of always 5000 → 2500/7500 → … Slightly increases the chance of running out of guesses.">?</span>
+        </label>
+        <div class="toggle" style="gap:.4rem">
+          <span>Tail lock</span>
+          <input type="text" id="tailLockInput" maxlength="2" placeholder="--"
+            style="width:2.8rem;text-align:center;background:#232733;border:1px solid #2a2f3a;border-radius:6px;color:var(--fg);font:inherit;font-size:.9rem;padding:.1rem .3rem">
+          <button id="tailLockClear" style="background:transparent;border:1px solid #2a2f3a;color:var(--muted);padding:.1rem .45rem;border-radius:6px;font-size:.8rem;cursor:pointer;font-weight:600">×</button>
+          <span class="info" tabindex="0" data-tip="Fix the last 2 digits of every suggestion (e.g. type '42' → suggestions end in 42). Auto-disables when the range drops below 100. Cannot be used with Jitter mode.">?</span>
+        </div>
+      </div>
     </div>
 
     <div class="hint">Keyboard: J / K / L = lower · correct · higher · R = reset · U = undo (when the number isn't focused).</div>
@@ -257,7 +266,7 @@
   const ROUND_KEY = 'guess-helper-round-v1';
   const JITTER_KEY = 'guess-helper-jitter-v1';
   const NOISE_FRAC = 0.03, NOISE_GUESSES = 5;
-  const ROUND_VERSION = 2;
+  const ROUND_VERSION = 3;
 
   // Migrations bring an older round state up to the next version.
   // Each entry migrates from version N to N+1.
@@ -267,9 +276,15 @@
       s.v = 2;
       return s;
     },
+    2: (s) => {
+      s.tailLock = null;
+      s.v = 3;
+      return s;
+    },
   };
   let lo, hi, guesses, history, locked, winAt, suggestion;
   let undoStack = [];
+  let tailLock = null;
   let autoResetTimer = null;
   let jitterOn = localStorage.getItem(JITTER_KEY) === '1';
 
@@ -277,7 +292,7 @@
     return {
       lo, hi, guesses,
       history: history.map(h => ({ n: h.n, r: h.r })),
-      locked, winAt, suggestion,
+      locked, winAt, suggestion, tailLock,
       winRecorded: false,
     };
   }
@@ -288,8 +303,19 @@
 
   const $ = (id) => document.getElementById(id);
   const midpoint = () => Math.floor((lo + hi) / 2);
+  function nearestWithSuffix(m, suffix, lo, hi) {
+    const base = Math.floor(m / 100) * 100 + suffix;
+    for (const c of [base, base + 100, base - 100, base + 200, base - 200]) {
+      if (c >= lo && c <= hi) return c;
+    }
+    return null;
+  }
   function computeSuggestion() {
     const m = midpoint();
+    if (tailLock !== null && (hi - lo) >= 100) {
+      const c = nearestWithSuffix(m, tailLock, lo, hi);
+      if (c !== null) return c;
+    }
     if (!jitterOn || guesses >= NOISE_GUESSES || locked) return m;
     const noise = Math.floor((hi - lo + 1) * NOISE_FRAC);
     if (noise === 0) return m;
@@ -306,7 +332,7 @@
   }
 
   function saveRound() {
-    localStorage.setItem(ROUND_KEY, JSON.stringify({ v: ROUND_VERSION, lo, hi, guesses, history, locked, winAt, suggestion, undoStack }));
+    localStorage.setItem(ROUND_KEY, JSON.stringify({ v: ROUND_VERSION, lo, hi, guesses, history, locked, winAt, suggestion, undoStack, tailLock }));
   }
   function migrateRound(s) {
     let v = Number.isInteger(s.v) ? s.v : 1;
@@ -338,6 +364,7 @@
     }
     if (s.suggestion !== undefined && s.suggestion !== null && !Number.isInteger(s.suggestion)) return null;
     if (!Array.isArray(s.undoStack)) return null;
+    if (!(s.tailLock === null || (Number.isInteger(s.tailLock) && s.tailLock >= 0 && s.tailLock <= 99))) return null;
     return s;
   }
   function recordWin(answer, guessCount) {
@@ -371,9 +398,11 @@
     lo = LO0; hi = HI0; guesses = 0; history = [];
     locked = false; winAt = null;
     undoStack = [];
+    tailLock = null;
     suggestion = computeSuggestion();
     saveRound();
     render();
+    updateTailLockUI();
   }
 
   function undo() {
@@ -388,9 +417,11 @@
     lo = snap.lo; hi = snap.hi; guesses = snap.guesses;
     history = snap.history.map(h => ({ n: h.n, r: h.r }));
     locked = snap.locked; winAt = snap.winAt;
+    tailLock = (Number.isInteger(snap.tailLock) && snap.tailLock >= 0 && snap.tailLock <= 99) ? snap.tailLock : null;
     suggestion = Number.isInteger(snap.suggestion) ? snap.suggestion : computeSuggestion();
     saveRound();
     clearBanner();
+    updateTailLockUI();
     render();
   }
 
@@ -417,6 +448,7 @@
     if (direction === 'higher') lo = g + 1;
     if (lo > hi) { locked = true; banner('Contradiction — please Reset.', 'warn'); }
     else if (guesses >= MAX) { locked = true; banner('Out of guesses.', 'warn'); }
+    if (tailLock !== null && (hi - lo) < 100) { tailLock = null; updateTailLockUI(); }
     suggestion = computeSuggestion();
     saveRound();
     render();
@@ -495,7 +527,9 @@
       sug.innerHTML = '';
     } else {
       const s = suggestion;
-      const label = (jitterOn && guesses < NOISE_GUESSES) ? 'Suggested (jittered)' : 'Binary-search suggestion';
+      const label = tailLock !== null
+        ? `Tail locked ·${String(tailLock).padStart(2, '0')}`
+        : (jitterOn && guesses < NOISE_GUESSES ? 'Suggested (jittered)' : 'Binary-search suggestion');
       sug.innerHTML = `${label}: <span class="pill" id="useSuggestion">${s}</span>`;
       $('useSuggestion').addEventListener('click', () => {
         const input = $('guessInput');
@@ -548,6 +582,12 @@
     $('clearWins').addEventListener('click', clearWins);
   }
 
+  function updateTailLockUI() {
+    const input = $('tailLockInput');
+    if (!input) return;
+    input.value = tailLock !== null ? String(tailLock).padStart(2, '0') : '';
+  }
+
   function attachInputHandlers(input) {
     input.addEventListener('focus', () => input.select());
     input.addEventListener('input', () => {
@@ -569,12 +609,43 @@
   $('jitterToggle').addEventListener('change', (e) => {
     jitterOn = e.target.checked;
     localStorage.setItem(JITTER_KEY, jitterOn ? '1' : '0');
+    if (jitterOn && tailLock !== null) {
+      tailLock = null;
+      updateTailLockUI();
+    }
     if (!locked) {
       suggestion = computeSuggestion();
       saveRound();
       render();
     }
   });
+  $('tailLockInput').addEventListener('input', (e) => {
+    const v = e.target.value.trim();
+    if (/^\d{2}$/.test(v)) {
+      tailLock = parseInt(v, 10);
+      if (jitterOn) {
+        jitterOn = false;
+        localStorage.setItem(JITTER_KEY, '0');
+        $('jitterToggle').checked = false;
+      }
+      suggestion = computeSuggestion();
+      saveRound();
+      render();
+    } else if (v === '') {
+      tailLock = null;
+      suggestion = computeSuggestion();
+      saveRound();
+      render();
+    }
+  });
+  $('tailLockClear').addEventListener('click', () => {
+    tailLock = null;
+    updateTailLockUI();
+    suggestion = computeSuggestion();
+    saveRound();
+    render();
+  });
+
   attachInputHandlers($('guessInput'));
 
   document.addEventListener('keydown', (e) => {
@@ -594,6 +665,8 @@
     ({ lo, hi, guesses, history, locked, winAt } = saved);
     suggestion = Number.isInteger(saved.suggestion) ? saved.suggestion : computeSuggestion();
     undoStack = Array.isArray(saved.undoStack) ? saved.undoStack : [];
+    tailLock = (Number.isInteger(saved.tailLock) && saved.tailLock >= 0 && saved.tailLock <= 99) ? saved.tailLock : null;
+    updateTailLockUI();
     render();
     if (winAt) {
       banner(`Won in ${winAt} guess${winAt === 1 ? '' : 'es'}! Auto-reset in 3s…`, 'win');
